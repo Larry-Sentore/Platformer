@@ -15,6 +15,8 @@ public class ScoreManager : MonoBehaviour {
 
 	void Start () {
 		coinTextScore = GameObject.Find ("CoinText").GetComponent<Text> ();
+		scoreCount = 0;
+		coinTextScore.text = "x0";
 	}
 
 	void OnTriggerEnter2D(Collider2D target) {

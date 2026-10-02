@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour {
 
@@ -12,9 +13,9 @@ public class GameManager : MonoBehaviour {
     public Text lifeText;
 
     [Header("Respawn")]
-    public Transform player;
     public Transform respawnPoint;
-    public Vector3 respawnPosition = new Vector3(-1.18f, -3.652f, 0f);
+    private static readonly Vector3 DefaultRespawnPosition = new Vector3(-1.18f, -3.652f, 0f);
+    private Transform player;
 
     [Header("UI Panels")]
     public GameObject startMenuPanel;
@@ -31,9 +32,17 @@ public class GameManager : MonoBehaviour {
             return;
         }
 
+        SceneManager.sceneLoaded += HandleSceneLoaded;
         currentLives = maxLives;
         RefreshRefs();
         UpdateLifeText();
+    }
+
+    private void OnDestroy() {
+        if (Instance == this) {
+            SceneManager.sceneLoaded -= HandleSceneLoaded;
+            Instance = null;
+        }
     }
 
     private void Start() {
@@ -42,6 +51,10 @@ public class GameManager : MonoBehaviour {
     }
 
     private void RefreshRefs() {
+        if (respawnPoint == null) {
+            respawnPoint = GameObject.Find("Respawn point")?.transform;
+        }
+
         if (lifeText == null) {
             lifeText = GameObject.Find("LifeText")?.GetComponent<Text>();
         }
@@ -51,21 +64,11 @@ public class GameManager : MonoBehaviour {
         }
 
         if (startMenuPanel == null) {
-            startMenuPanel = GameObject.Find("StartPanel") ?? GameObject.Find("Start Menu") ?? GameObject.Find("MainMenuPanel");
+            startMenuPanel = FindSceneObject("StartPanel", "Start Menu", "MainMenuPanel");
         }
 
         if (gameOverPanel == null) {
-            gameOverPanel = GameObject.Find("GameOverPanel") ?? GameObject.Find("GameOver") ?? GameObject.Find("Game Over") ?? GameObject.Find("EndPanel");
-        }
-
-        if (respawnPoint == null) {
-            respawnPoint = GameObject.FindGameObjectWithTag("Respawn")?.transform;
-        }
-
-        if (respawnPoint != null) {
-            respawnPosition = respawnPoint.position;
-        } else {
-            respawnPosition = new Vector3(-1.18f, -3.652f, 0f);
+            gameOverPanel = FindSceneObject("GameOverPanel", "GameOver", "Game Over", "EndPanel", "End");
         }
 
         if (cameraFollow == null) {
@@ -74,6 +77,52 @@ public class GameManager : MonoBehaviour {
                 cameraFollow = mainCamera.GetComponent<CameraFollow>();
             }
         }
+    }
+
+    private void HandleSceneLoaded(Scene scene, LoadSceneMode mode) {
+        player = null;
+        respawnPoint = null;
+        lifeText = null;
+        startMenuPanel = null;
+        gameOverPanel = null;
+        cameraFollow = null;
+        currentLives = maxLives;
+
+        RefreshRefs();
+        UpdateLifeText();
+
+        if (startMenuPanel != null) {
+            startMenuPanel.SetActive(false);
+        }
+
+        if (gameOverPanel != null) {
+            gameOverPanel.SetActive(false);
+        }
+
+        Time.timeScale = 1f;
+    }
+
+    private GameObject FindSceneObject(params string[] possibleNames) {
+        foreach (string objectName in possibleNames) {
+            GameObject found = GameObject.Find(objectName);
+            if (found != null) {
+                return found;
+            }
+        }
+
+        foreach (GameObject obj in Resources.FindObjectsOfTypeAll<GameObject>()) {
+            if (obj == null || !obj.scene.IsValid() || obj.scene != SceneManager.GetActiveScene()) {
+                continue;
+            }
+
+            foreach (string objectName in possibleNames) {
+                if (obj.name == objectName) {
+                    return obj;
+                }
+            }
+        }
+
+        return null;
     }
 
     public void ShowStartMenu() {
@@ -103,17 +152,15 @@ public class GameManager : MonoBehaviour {
         Time.timeScale = 1f;
 
         if (player != null) {
+            Vector3 spawnPosition = GetRespawnPosition();
             player.gameObject.SetActive(true);
-            player.position = respawnPosition;
-            ResetCameraToRespawn();
+            player.position = spawnPosition;
+            ResetCameraToPosition(spawnPosition);
         }
     }
 
     public void RegisterPlayer(Transform playerTransform) {
         player = playerTransform;
-        if (player != null) {
-            respawnPosition = new Vector3(-1.18f, -3.652f, 0f);
-        }
     }
 
     public void UpdateLifeText() {
@@ -158,7 +205,7 @@ public class GameManager : MonoBehaviour {
 
     private void ShowGameOverPanel() {
         if (gameOverPanel == null) {
-            gameOverPanel = GameObject.Find("GameOverPanel") ?? GameObject.Find("GameOver") ?? GameObject.Find("Game Over") ?? GameObject.Find("EndPanel");
+            gameOverPanel = FindSceneObject("GameOverPanel", "GameOver", "Game Over", "EndPanel", "End");
         }
 
         if (gameOverPanel != null) {
@@ -173,13 +220,25 @@ public class GameManager : MonoBehaviour {
             return;
         }
 
+        Vector3 spawnPosition = GetRespawnPosition();
         player.gameObject.SetActive(true);
         Time.timeScale = 1f;
-        player.position = respawnPosition;
-        ResetCameraToRespawn();
+        player.position = spawnPosition;
+        ResetCameraToPosition(spawnPosition);
     }
 
     public void ResetCameraToRespawn() {
+        ResetCameraToPosition(GetRespawnPosition());
+    }
+
+    private Vector3 GetRespawnPosition() {
+        RefreshRefs();
+        Vector3 position = respawnPoint != null ? respawnPoint.position : DefaultRespawnPosition;
+        position.y = 5f;
+        return position;
+    }
+
+    private void ResetCameraToPosition(Vector3 position) {
         if (cameraFollow == null) {
             Camera mainCamera = Camera.main;
             if (mainCamera != null) {
@@ -188,12 +247,13 @@ public class GameManager : MonoBehaviour {
         }
 
         if (cameraFollow != null) {
-            cameraFollow.ResetToPosition(respawnPosition);
+            cameraFollow.ResetToPosition(position);
         }
     }
 
     public void ReplayGame() {
-        StartGame();
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
     public void QuitGame() {
