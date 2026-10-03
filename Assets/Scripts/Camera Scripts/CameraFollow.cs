@@ -36,7 +36,7 @@ public class CameraFollow : MonoBehaviour {
 		if (target == null) {
 			return;
 		}
-
+		// Reset the camera to the respawn position of the player.
 		float z = respawnPosition.z + offsetZ;
 		transform.position = new Vector3(respawnPosition.x, transform.position.y, z);
 	}
